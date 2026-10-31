@@ -132,6 +132,37 @@ func TestUpdateIndexSearchEntityAndState(t *testing.T) {
 	}
 }
 
+func TestSearchMatchesCyrillicQueryTerms(t *testing.T) {
+	store := openTestStore(t)
+	defer func() { _ = store.Close() }()
+
+	now := time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
+	err := store.UpdateIndex(t.Context(), IndexData{
+		Pages: []PageRecord{
+			{Slug: "projects/bathroom", Path: "/memory/projects/bathroom.md", Type: "projects", Title: "Bathroom", AliasesJSON: `[]`, Frontmatter: map[string]any{"title": "Bathroom"}, BodyHash: "a", ModifiedAt: now, IndexedAt: now, ExtractorHash: "v1"},
+		},
+		Chunks: []ChunkRecord{
+			{Slug: "projects/bathroom", Index: 0, Title: "Bathroom", Body: "Тёплый пол в ванной: мат TVK-130.", BodyHash: "b", ModifiedAt: now},
+		},
+	}, nil, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, query := range []string{"тёплый пол", "мат ванной"} {
+		hits, err := store.Search(t.Context(), query, 5)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(hits) == 0 || hits[0].Slug != "projects/bathroom" {
+			t.Fatalf("Search(%q) = %#v, want projects/bathroom", query, hits)
+		}
+	}
+	if terms := titleAliasLookupTerms("тёплый пол в ванной"); strings.Join(terms, "|") != "тёплый пол в ванной|тёплый|пол|ванной" {
+		t.Fatalf("title alias terms = %q, want single-letter words skipped", terms)
+	}
+}
+
 func openTestStore(t *testing.T) *Store {
 	t.Helper()
 	store, err := Open(filepath.Join(t.TempDir(), "index.sqlite"))

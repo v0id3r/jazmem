@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 func millis(t time.Time) int64 {
@@ -15,7 +16,7 @@ func millis(t time.Time) int64 {
 	return t.UTC().UnixMilli()
 }
 
-var ftsToken = regexp.MustCompile(`[A-Za-z0-9_]+`)
+var ftsToken = regexp.MustCompile(`[\p{L}\p{M}\p{N}_]+`)
 
 var ignoredLookupTokens = map[string]bool{
 	"about": true,
@@ -86,7 +87,7 @@ func titleAliasLookupTerms(query string) []string {
 		if ignoredLookupTokens[term] {
 			continue
 		}
-		if len(term) < 2 && len(tokens) > 1 {
+		if utf8.RuneCountInString(term) < 2 && len(tokens) > 1 {
 			continue
 		}
 		add(term)
