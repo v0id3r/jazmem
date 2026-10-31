@@ -12,8 +12,8 @@ func TestMigrateFreshDB(t *testing.T) {
 	store := openTestStore(t)
 	defer func() { _ = store.Close() }()
 
-	if version := gooseVersion(t, store.db); version != 1 {
-		t.Fatalf("goose version = %d, want 1", version)
+	if version := gooseVersion(t, store.db); version != 2 {
+		t.Fatalf("goose version = %d, want 2", version)
 	}
 	for _, table := range []string{"pages", "aliases", "links", "unresolved_links", "chunks", "chunks_fts", "scheduler_state", "index_state"} {
 		exists, err := store.tableExists(t.Context(), table)
@@ -38,8 +38,8 @@ func TestMigrateAdoptsCompleteLegacySchema(t *testing.T) {
 	}
 	defer func() { _ = store.Close() }()
 
-	if version := gooseVersion(t, store.db); version != 1 {
-		t.Fatalf("goose version = %d, want 1", version)
+	if version := gooseVersion(t, store.db); version != 2 {
+		t.Fatalf("goose version = %d, want 2", version)
 	}
 }
 
@@ -140,16 +140,18 @@ func TestSearchMatchesCyrillicQueryTerms(t *testing.T) {
 	err := store.UpdateIndex(t.Context(), IndexData{
 		Pages: []PageRecord{
 			{Slug: "projects/bathroom", Path: "/memory/projects/bathroom.md", Type: "projects", Title: "Bathroom", AliasesJSON: `[]`, Frontmatter: map[string]any{"title": "Bathroom"}, BodyHash: "a", ModifiedAt: now, IndexedAt: now, ExtractorHash: "v1"},
+			{Slug: "projects/hall", Path: "/memory/projects/hall.md", Type: "projects", Title: "Hall", AliasesJSON: `[]`, Frontmatter: map[string]any{"title": "Hall"}, BodyHash: "c", ModifiedAt: now, IndexedAt: now, ExtractorHash: "v1"},
 		},
 		Chunks: []ChunkRecord{
-			{Slug: "projects/bathroom", Index: 0, Title: "Bathroom", Body: "Тёплый пол в ванной: мат TVK-130.", BodyHash: "b", ModifiedAt: now},
+			{Slug: "projects/bathroom", Index: 0, Title: "Bathroom", Body: "Тёплый пол в ванной: мат TVK-130, кабель в штрабах.", BodyHash: "b", ModifiedAt: now},
+			{Slug: "projects/hall", Index: 0, Title: "Hall", Body: "В коридоре другой кабеля отрезок.", BodyHash: "d", ModifiedAt: now},
 		},
 	}, nil, "test")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	for _, query := range []string{"тёплый пол", "мат ванной"} {
+	for _, query := range []string{"тёплый пол", "мат ванной", "теплого пола", "ванную"} {
 		hits, err := store.Search(t.Context(), query, 5)
 		if err != nil {
 			t.Fatal(err)
@@ -157,6 +159,13 @@ func TestSearchMatchesCyrillicQueryTerms(t *testing.T) {
 		if len(hits) == 0 || hits[0].Slug != "projects/bathroom" {
 			t.Fatalf("Search(%q) = %#v, want projects/bathroom", query, hits)
 		}
+	}
+	hits, err := store.Search(t.Context(), "кабель", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 2 || hits[0].Slug != "projects/bathroom" {
+		t.Fatalf("Search(кабель) = %#v, want the exact form first and the stem match second", hits)
 	}
 	if terms := titleAliasLookupTerms("тёплый пол в ванной"); strings.Join(terms, "|") != "тёплый пол в ванной|тёплый|пол|ванной" {
 		t.Fatalf("title alias terms = %q, want single-letter words skipped", terms)

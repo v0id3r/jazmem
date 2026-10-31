@@ -159,8 +159,8 @@ func (q *Queries) InsertChunk(ctx context.Context, arg InsertChunkParams) error 
 }
 
 const insertChunkFTS = `-- name: InsertChunkFTS :exec
-INSERT INTO chunks_fts(slug, chunk_index, title, body)
-VALUES (?, ?, ?, ?)
+INSERT INTO chunks_fts(slug, chunk_index, title, body, terms)
+VALUES (?, ?, ?, ?, ?)
 `
 
 type InsertChunkFTSParams struct {
@@ -168,6 +168,7 @@ type InsertChunkFTSParams struct {
 	ChunkIndex string `json:"chunk_index"`
 	Title      string `json:"title"`
 	Body       string `json:"body"`
+	Terms      string `json:"terms"`
 }
 
 func (q *Queries) InsertChunkFTS(ctx context.Context, arg InsertChunkFTSParams) error {
@@ -176,6 +177,7 @@ func (q *Queries) InsertChunkFTS(ctx context.Context, arg InsertChunkFTSParams) 
 		arg.ChunkIndex,
 		arg.Title,
 		arg.Body,
+		arg.Terms,
 	)
 	return err
 }

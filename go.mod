@@ -3,6 +3,7 @@ module github.com/gluonfield/jazmem
 go 1.26
 
 require (
+	github.com/kljensen/snowball v0.10.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/pressly/goose/v3 v3.27.1
 	go.uber.org/fx v1.24.0

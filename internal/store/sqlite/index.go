@@ -162,6 +162,7 @@ func insertChunks(ctx context.Context, q indexdb.Querier, chunks []ChunkRecord) 
 			ChunkIndex: strconv.Itoa(chunk.Index),
 			Title:      chunk.Title,
 			Body:       chunk.Body,
+			Terms:      searchTerms(chunk.Title + "\n" + chunk.Body),
 		}); err != nil {
 			return err
 		}

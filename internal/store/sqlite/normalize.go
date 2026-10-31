@@ -6,7 +6,10 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
+
+	"github.com/kljensen/snowball/russian"
 )
 
 func millis(t time.Time) int64 {
@@ -17,6 +20,33 @@ func millis(t time.Time) int64 {
 }
 
 var ftsToken = regexp.MustCompile(`[\p{L}\p{M}\p{N}_]+`)
+
+var yoFold = strings.NewReplacer("ё", "е")
+
+// searchTerms fills the FTS terms column: words folded the way searchTerm
+// folds query words, so ё/е spellings and Russian word forms match.
+func searchTerms(text string) string {
+	words := ftsToken.FindAllString(text, -1)
+	for i, word := range words {
+		words[i] = searchTerm(word)
+	}
+	return strings.Join(words, " ")
+}
+
+// searchTerm lowercases a word, folds ё to е, and reduces Cyrillic words to
+// their Snowball stem. The stemmer must see the folded word: it stems ё and е
+// spellings differently.
+func searchTerm(word string) string {
+	word = yoFold.Replace(strings.ToLower(word))
+	if !strings.ContainsFunc(word, isCyrillic) {
+		return word
+	}
+	return russian.Stem(word, false)
+}
+
+func isCyrillic(r rune) bool {
+	return unicode.Is(unicode.Cyrillic, r)
+}
 
 var ignoredLookupTokens = map[string]bool{
 	"about": true,
@@ -149,8 +179,13 @@ func ftsQueryJoin(tokens []string, separator string) string {
 	}
 	parts := make([]string, 0, len(tokens))
 	for _, token := range tokens {
+		term := searchTerm(token)
 		token = strings.ReplaceAll(token, `"`, `""`)
-		parts = append(parts, fmt.Sprintf(`"%s"`, token))
+		if term == strings.ToLower(token) {
+			parts = append(parts, fmt.Sprintf(`"%s"`, token))
+			continue
+		}
+		parts = append(parts, fmt.Sprintf(`("%s" OR terms:"%s")`, token, strings.ReplaceAll(term, `"`, `""`)))
 	}
 	return strings.Join(parts, separator)
 }

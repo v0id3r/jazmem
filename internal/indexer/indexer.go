@@ -23,7 +23,7 @@ import (
 // graph as body wikilinks without being duplicated into prose.
 var frontmatterLinkFields = []string{"project"}
 
-const extractorHash = "jazmem-indexer-v3"
+const extractorHash = "jazmem-indexer-v4"
 
 type Indexer struct {
 	mu    sync.Mutex
