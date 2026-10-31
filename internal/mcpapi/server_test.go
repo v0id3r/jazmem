@@ -73,16 +73,12 @@ func TestServerTools(t *testing.T) {
 		t.Fatal(err)
 	}
 	page := decodeStructured[PageOutput](t, pageCall)
-	if !page.Found || page.Path != "people/alice-bentick" {
+	if !page.Found || page.Path != "people/alice-bentick" || !strings.Contains(page.Markdown, "Alice works on jazmem") {
 		t.Fatalf("unexpected page response %#v", page)
 	}
 	assertNoStructuredKeys(t, pageCall, "raw", "slug", "title", "type")
-	if len(pageCall.Content) == 0 {
-		t.Fatal("expected raw markdown text content")
-	}
-	text, ok := pageCall.Content[0].(*mcp.TextContent)
-	if !ok || !strings.Contains(text.Text, "Alice works on jazmem") {
-		t.Fatalf("unexpected text content %#v", pageCall.Content)
+	if text := decodeText[PageOutput](t, pageCall); text.Markdown != page.Markdown {
+		t.Fatalf("text content %#v does not mirror structured content", pageCall.Content)
 	}
 
 	missingCall, err := session.CallTool(context.Background(), &mcp.CallToolParams{
@@ -96,9 +92,8 @@ func TestServerTools(t *testing.T) {
 	if missing.Found || missing.Error != "not found: people/alice" || len(missing.Suggestions) == 0 || missing.Suggestions[0].Slug != "people/alice-bentick" {
 		t.Fatalf("unexpected missing response %#v", missing)
 	}
-	missingText, ok := missingCall.Content[0].(*mcp.TextContent)
-	if !ok || !strings.Contains(missingText.Text, "not found: people/alice") || !strings.Contains(missingText.Text, "people/alice-bentick") {
-		t.Fatalf("unexpected missing text content %#v", missingCall.Content)
+	if text := decodeText[PageOutput](t, missingCall); text.Error != missing.Error || len(text.Suggestions) != len(missing.Suggestions) {
+		t.Fatalf("missing text content %#v does not mirror structured content", missingCall.Content)
 	}
 
 	rawServer := mcp.NewServer(&mcp.Implementation{Name: "raw-test", Version: "0.0.1"}, nil)
@@ -197,6 +192,22 @@ func decodeStructured[T any](t *testing.T, result *mcp.CallToolResult) T {
 	}
 	if err := json.Unmarshal(data, &out); err != nil {
 		t.Fatalf("decode structured content: %v\n%s", err, string(data))
+	}
+	return out
+}
+
+func decodeText[T any](t *testing.T, result *mcp.CallToolResult) T {
+	t.Helper()
+	var out T
+	if len(result.Content) != 1 {
+		t.Fatalf("expected one text content, got %#v", result.Content)
+	}
+	text, ok := result.Content[0].(*mcp.TextContent)
+	if !ok {
+		t.Fatalf("unexpected content %#v", result.Content[0])
+	}
+	if err := json.Unmarshal([]byte(text.Text), &out); err != nil {
+		t.Fatalf("decode text content: %v\n%s", err, text.Text)
 	}
 	return out
 }

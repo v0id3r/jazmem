@@ -3,7 +3,6 @@ package mcpapi
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -81,7 +80,7 @@ func addPageTool(server *mcp.Server, memory PageReader, name, title string) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        name,
 		Title:       title,
-		Description: "Read one jazmem memory markdown page by path, such as people/alice or projects/jazmem. Returns raw markdown as text content plus compact metadata, links/backlinks, and not-found suggestions.",
+		Description: "Read one jazmem memory markdown page by path, such as people/alice or projects/jazmem. Returns the raw markdown plus compact metadata, links/backlinks, and not-found suggestions.",
 	}, service.GetPage)
 }
 
@@ -161,6 +160,7 @@ type PageOutput struct {
 	ModifiedAt  string                  `json:"modified_at,omitempty"`
 	Links       []jazmem.LinkRef        `json:"links,omitempty"`
 	Backlinks   []jazmem.LinkRef        `json:"backlinks,omitempty"`
+	Markdown    string                  `json:"markdown,omitempty"`
 }
 
 func (s *PageService) GetPage(ctx context.Context, _ *mcp.CallToolRequest, input PageInput) (*mcp.CallToolResult, PageOutput, error) {
@@ -170,14 +170,9 @@ func (s *PageService) GetPage(ctx context.Context, _ *mcp.CallToolRequest, input
 	}
 	page, err := s.Memory.GetPage(ctx, path)
 	if err != nil {
-		output := notFoundPageOutput(err)
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: notFoundText(output)}},
-		}, output, nil
+		return nil, notFoundPageOutput(err), nil
 	}
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{&mcp.TextContent{Text: page.Raw}},
-	}, pageOutput(page), nil
+	return nil, pageOutput(page), nil
 }
 
 func pageOutput(page jazmem.Page) PageOutput {
@@ -188,6 +183,7 @@ func pageOutput(page jazmem.Page) PageOutput {
 		ModifiedAt: page.ModifiedAt.Format(time.RFC3339Nano),
 		Links:      page.Links,
 		Backlinks:  page.Backlinks,
+		Markdown:   page.Raw,
 	}
 }
 
@@ -207,24 +203,4 @@ func cleanPagePath(path string) string {
 	path = strings.TrimSpace(path)
 	path = strings.TrimPrefix(path, "memory/")
 	return memfs.CleanSlug(path)
-}
-
-func notFoundText(output PageOutput) string {
-	if output.Error == "" {
-		return "not found"
-	}
-	var b strings.Builder
-	b.WriteString(output.Error)
-	if len(output.Suggestions) == 0 {
-		return b.String()
-	}
-	b.WriteString("\nsuggestions:")
-	for _, suggestion := range output.Suggestions {
-		if suggestion.Title == "" {
-			fmt.Fprintf(&b, "\n- %s", suggestion.Slug)
-			continue
-		}
-		fmt.Fprintf(&b, "\n- %s (%s)", suggestion.Slug, suggestion.Title)
-	}
-	return b.String()
 }
