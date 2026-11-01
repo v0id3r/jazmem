@@ -3,13 +3,11 @@ package sqlite
 import (
 	"fmt"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
-	"unicode"
 	"unicode/utf8"
 
-	"github.com/kljensen/snowball/russian"
+	"github.com/gluonfield/jazmem/pkg/terms"
 )
 
 func millis(t time.Time) int64 {
@@ -17,35 +15,6 @@ func millis(t time.Time) int64 {
 		return 0
 	}
 	return t.UTC().UnixMilli()
-}
-
-var ftsToken = regexp.MustCompile(`[\p{L}\p{M}\p{N}_]+`)
-
-var yoFold = strings.NewReplacer("ё", "е")
-
-// searchTerms fills the FTS terms column: words folded the way searchTerm
-// folds query words, so ё/е spellings and Russian word forms match.
-func searchTerms(text string) string {
-	words := ftsToken.FindAllString(text, -1)
-	for i, word := range words {
-		words[i] = searchTerm(word)
-	}
-	return strings.Join(words, " ")
-}
-
-// searchTerm lowercases a word, folds ё to е, and reduces Cyrillic words to
-// their Snowball stem. The stemmer must see the folded word: it stems ё and е
-// spellings differently.
-func searchTerm(word string) string {
-	word = yoFold.Replace(strings.ToLower(word))
-	if !strings.ContainsFunc(word, isCyrillic) {
-		return word
-	}
-	return russian.Stem(word, false)
-}
-
-func isCyrillic(r rune) bool {
-	return unicode.Is(unicode.Cyrillic, r)
 }
 
 // stopWords are function words that match almost every chunk; queries drop
@@ -85,10 +54,10 @@ func chunkPoolLimit(pageLimit int) int {
 }
 
 func ftsTokens(query string) []string {
-	tokens := ftsToken.FindAllString(query, -1)
+	tokens := terms.Words(query)
 	content := tokens[:0:0]
 	for _, token := range tokens {
-		if !stopWords[yoFold.Replace(strings.ToLower(token))] {
+		if !stopWords[terms.Fold(token)] {
 			content = append(content, token)
 		}
 	}
@@ -106,7 +75,7 @@ func ftsTokens(query string) []string {
 func QueryTerms(query string) []string {
 	tokens := ftsTokens(query)
 	for i, token := range tokens {
-		tokens[i] = searchTerm(token)
+		tokens[i] = terms.Term(token)
 	}
 	return tokens
 }
@@ -192,7 +161,7 @@ func ftsQueryJoin(tokens []string, separator string) string {
 	}
 	parts := make([]string, 0, len(tokens))
 	for _, token := range tokens {
-		term := strings.ReplaceAll(searchTerm(token), `"`, `""`)
+		term := strings.ReplaceAll(terms.Term(token), `"`, `""`)
 		token = strings.ReplaceAll(token, `"`, `""`)
 		parts = append(parts, fmt.Sprintf(`({title body}:"%s" OR terms:"%s")`, token, term))
 	}

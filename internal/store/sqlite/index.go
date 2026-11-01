@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gluonfield/jazmem/internal/store/sqlite/generated/indexdb"
+	"github.com/gluonfield/jazmem/pkg/terms"
 )
 
 // UpdateIndex replaces the removed pages' data and the complete relationship
@@ -162,7 +163,7 @@ func insertChunks(ctx context.Context, q indexdb.Querier, chunks []ChunkRecord) 
 			ChunkIndex: strconv.Itoa(chunk.Index),
 			Title:      chunk.Title,
 			Body:       chunk.Body,
-			Terms:      searchTerms(chunk.Title + "\n" + chunk.Body),
+			Terms:      terms.Text(chunk.Title + "\n" + chunk.Body),
 		}); err != nil {
 			return err
 		}
