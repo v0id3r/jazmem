@@ -3,8 +3,6 @@ package search
 import (
 	"context"
 	"regexp"
-	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -21,7 +19,15 @@ type Service struct {
 const (
 	queryEmbedTimeout = 5 * time.Second
 	maxVectorDistance = 0.52
-	vectorScoreOffset = -1.0
+)
+
+// Arm weights: what first place in each retrieval method is worth.
+const (
+	relationshipWeight = 3.0
+	titleWeight        = 1.5
+	textWeight         = 1.0
+	semanticWeight     = 1.0
+	linkWeight         = 0.3
 )
 
 type Options struct {
@@ -41,51 +47,54 @@ func (s *Service) Search(ctx context.Context, query string, opts Options) (Respo
 	if err != nil {
 		return Response{}, err
 	}
-	tagVia(relationalRows, "relationship")
 	titleRows, err := s.Store.SearchTitleAlias(ctx, query, limit)
 	if err != nil {
 		return Response{}, err
 	}
-	bm25Rows, err := s.Store.Search(ctx, query, chunkCandidateLimit(limit))
+	textRows, err := s.Store.Search(ctx, query, chunkCandidateLimit(limit))
 	if err != nil {
 		return Response{}, err
 	}
+	queryTerms := sqlitestore.QueryTerms(query)
 	var warnings []string
 	vectorRows, err := s.vectorSearch(ctx, query, limit)
 	if err != nil {
 		warnings = append(warnings, "vector search skipped: "+err.Error())
 	}
-	tagVia(vectorRows, "semantic")
-	merged := mergeRows(relationalRows, titleRows, bm25Rows, vectorRows)
-	seeds := topSlugs(merged, limit)
-	graphRows, err := s.Store.LinkedPages(ctx, seeds, limit)
+	arms := []arm{
+		{via: "relationship", weight: relationshipWeight, rows: relationalRows},
+		{weight: titleWeight, rows: titleRows, strength: func(row sqlitestore.SearchResult) float64 {
+			return titleCoverage(queryTerms, row.Title)
+		}},
+		{weight: textWeight, rows: textRows},
+		{via: "semantic", weight: semanticWeight, rows: vectorRows},
+	}
+	direct := fuse(arms)
+	seeds := topSlugs(direct, limit)
+	linkRows, err := s.Store.LinkedPages(ctx, seeds, limit)
 	if err != nil {
 		return Response{}, err
 	}
-	graphHits := countNewSlugs(merged, graphRows)
 	if opts.Deep {
-		hop2Rows, err := s.secondHop(ctx, merged, seeds, graphRows, limit)
+		hop2Rows, err := s.secondHop(ctx, direct, seeds, linkRows, limit)
 		if err != nil {
 			return Response{}, err
 		}
-		graphHits += countNewSlugs(append(append([]sqlitestore.SearchResult{}, merged...), graphRows...), hop2Rows)
-		graphRows = append(graphRows, hop2Rows...)
+		linkRows = append(linkRows, hop2Rows...)
 	}
-	tagVia(graphRows, "link")
-	merged = mergeRows(merged, graphRows)
+	rows := fuse(append(arms, arm{via: "link", weight: linkWeight, rows: linkRows}))
 	candidateCap := chunkCandidateLimit(limit)
 	if opts.Deep {
 		candidateCap *= 2
 	}
-	if len(merged) > candidateCap {
-		merged = merged[:candidateCap]
+	if len(rows) > candidateCap {
+		rows = rows[:candidateCap]
 	}
-	return Response{Rows: merged, GraphHits: graphHits, Warnings: warnings}, nil
+	return Response{Rows: rows, GraphHits: countNewSlugs(direct, linkRows), Warnings: warnings}, nil
 }
 
-// vectorSearch returns chunks semantically close to query. Their scores sit
-// between direct text hits and link expansion, so vectors fill gaps that
-// exact terms miss without reordering what bm25 already found.
+// vectorSearch returns chunks within maxVectorDistance of query, closest
+// first; beyond it bge-m3 neighbours are unrelated.
 func (s *Service) vectorSearch(ctx context.Context, query string, limit int) ([]sqlitestore.SearchResult, error) {
 	if s.Embedder == nil {
 		return nil, nil
@@ -100,29 +109,26 @@ func (s *Service) vectorSearch(ctx context.Context, query string, limit int) ([]
 	if err != nil {
 		return nil, err
 	}
-	out := rows[:0]
-	for _, row := range rows {
+	for i, row := range rows {
 		if row.Score > maxVectorDistance {
-			break
+			return rows[:i], nil
 		}
-		row.Score += vectorScoreOffset
-		out = append(out, row)
 	}
-	return out, nil
+	return rows, nil
 }
 
-// secondHop expands links once more from pages the first hop discovered,
-// ranked below first-hop results.
-func (s *Service) secondHop(ctx context.Context, merged []sqlitestore.SearchResult, seeds []string, graphRows []sqlitestore.SearchResult, limit int) ([]sqlitestore.SearchResult, error) {
+// secondHop expands links once more from pages the first hop discovered;
+// they rank after first-hop links.
+func (s *Service) secondHop(ctx context.Context, direct []sqlitestore.SearchResult, seeds []string, linkRows []sqlitestore.SearchResult, limit int) ([]sqlitestore.SearchResult, error) {
 	known := map[string]bool{}
 	for _, slug := range seeds {
 		known[slug] = true
 	}
-	for _, row := range merged {
+	for _, row := range direct {
 		known[row.Slug] = true
 	}
 	var hop2Seeds []string
-	for _, row := range graphRows {
+	for _, row := range linkRows {
 		if known[row.Slug] {
 			continue
 		}
@@ -138,11 +144,9 @@ func (s *Service) secondHop(ctx context.Context, merged []sqlitestore.SearchResu
 	}
 	out := hop2Rows[:0]
 	for _, row := range hop2Rows {
-		if known[row.Slug] {
-			continue
+		if !known[row.Slug] {
+			out = append(out, row)
 		}
-		row.Score += 0.60
-		out = append(out, row)
 	}
 	return out, nil
 }
@@ -169,39 +173,6 @@ func (s *Service) relationalSearch(ctx context.Context, query string, limit int)
 	default:
 		return nil, nil
 	}
-}
-
-func tagVia(rows []sqlitestore.SearchResult, via string) {
-	for i := range rows {
-		rows[i].Via = via
-	}
-}
-
-func mergeRows(groups ...[]sqlitestore.SearchResult) []sqlitestore.SearchResult {
-	byMatch := map[string]sqlitestore.SearchResult{}
-	for _, group := range groups {
-		for _, row := range group {
-			key := row.Slug + "\x00" + strconv.Itoa(row.ChunkIndex)
-			current, ok := byMatch[key]
-			if !ok || row.Score < current.Score {
-				byMatch[key] = row
-			}
-		}
-	}
-	rows := make([]sqlitestore.SearchResult, 0, len(byMatch))
-	for _, row := range byMatch {
-		rows = append(rows, row)
-	}
-	sort.Slice(rows, func(a, b int) bool {
-		if rows[a].Score == rows[b].Score {
-			if rows[a].Slug == rows[b].Slug {
-				return rows[a].ChunkIndex < rows[b].ChunkIndex
-			}
-			return rows[a].Slug < rows[b].Slug
-		}
-		return rows[a].Score < rows[b].Score
-	})
-	return rows
 }
 
 func topSlugs(rows []sqlitestore.SearchResult, limit int) []string {

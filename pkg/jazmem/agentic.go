@@ -23,7 +23,6 @@ type agenticEvidenceItem struct {
 	ID       int
 	Citation Citation
 	Snippet  string
-	Score    float64
 }
 
 // evidencePool numbers retrieved chunks for citation and dedupes across
@@ -65,7 +64,7 @@ func (p *evidencePool) Add(results []Result) evidenceAdd {
 			p.seen[key] = true
 			id := len(p.items) + 1
 			citation := Citation{ID: id, Slug: result.Slug, Title: result.Title, Chunk: match.Chunk}
-			p.items = append(p.items, agenticEvidenceItem{ID: id, Citation: citation, Snippet: snippet, Score: match.Score})
+			p.items = append(p.items, agenticEvidenceItem{ID: id, Citation: citation, Snippet: snippet})
 			p.byID[id] = citation
 			added.Chunks++
 			if !p.seenPages[result.Slug] {

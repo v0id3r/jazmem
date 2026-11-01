@@ -58,18 +58,21 @@ type AgenticOptions struct {
 }
 
 type Match struct {
-	Chunk   int     `json:"chunk"`
-	Snippet string  `json:"snippet"`
-	Score   float64 `json:"score"`
+	Chunk   int    `json:"chunk"`
+	Snippet string `json:"snippet"`
 }
 
 type Result struct {
-	Slug  string  `json:"slug"`
-	Title string  `json:"title"`
+	Slug  string `json:"slug"`
+	Title string `json:"title"`
+	// Score is higher for better pages: each retrieval method that ranks the
+	// page first adds about its weight (text and semantic 1, title 1.5,
+	// relationship 3, link 0.3), less for lower ranks; daily pages count 0.7.
 	Score float64 `json:"score"`
 	// Via is set only when it changes how the agent should treat the hit:
-	// "relationship" (typed-edge match) or "link" (neighbor pulled in by
-	// expansion, not a direct match). Direct text/title hits carry no via.
+	// "relationship" (typed-edge match), "semantic" (similar meaning, no
+	// shared terms) or "link" (neighbor pulled in by expansion, not a direct
+	// match). Direct text/title hits carry no via.
 	Via        string    `json:"via,omitempty"`
 	ModifiedAt time.Time `json:"modified_at,omitzero"`
 	Matches    []Match   `json:"matches"`

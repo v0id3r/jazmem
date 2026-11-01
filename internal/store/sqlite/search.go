@@ -17,25 +17,32 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]SearchRe
 	}
 	limit = normalizeLimit(limit)
 	tokens := ftsTokens(query)
-	if match := ftsQueryAll(tokens); match != "" {
-		results, err := s.searchFTS(ctx, match, limit)
-		if err == nil && len(results) > 0 {
-			return results, nil
+	all, any := ftsQueryAll(tokens), ftsQueryAny(tokens)
+	if any == all {
+		any = ""
+	}
+	// Pages matching every term rank first, then pages matching any of them.
+	var results []SearchResult
+	seen := map[string]bool{}
+	for _, match := range []string{all, any} {
+		if match == "" {
+			continue
 		}
+		rows, err := s.searchFTS(ctx, match, limit)
 		if err != nil && !isFTSQuerySyntaxError(err) {
 			return nil, err
 		}
-	}
-	if match := ftsQueryAny(tokens); match != "" {
-		results, err := s.searchFTS(ctx, match, limit)
-		if err == nil && len(results) > 0 {
-			return results, nil
-		}
-		if err != nil && !isFTSQuerySyntaxError(err) {
-			return nil, err
+		for _, row := range rows {
+			if !seen[row.Slug] {
+				seen[row.Slug] = true
+				results = append(results, row)
+			}
 		}
 	}
-	return s.searchLike(ctx, query, limit)
+	if len(results) == 0 {
+		return s.searchLike(ctx, query, limit)
+	}
+	return results[:min(len(results), limit)], nil
 }
 
 func (s *Store) SearchTitleAlias(ctx context.Context, query string, limit int) ([]SearchResult, error) {

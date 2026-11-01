@@ -48,25 +48,19 @@ func isCyrillic(r rune) bool {
 	return unicode.Is(unicode.Cyrillic, r)
 }
 
-var ignoredLookupTokens = map[string]bool{
-	"about": true,
-	"and":   true,
-	"are":   true,
-	"for":   true,
-	"how":   true,
-	"the":   true,
-	"what":  true,
-	"where": true,
-	"which": true,
-	"who":   true,
-	"why":   true,
-	"with":  true,
-	"from":  true,
-	"into":  true,
-	"is":    true,
-	"me":    true,
-	"my":    true,
-	"tell":  true,
+// stopWords are function words that match almost every chunk; queries drop
+// them unless nothing else is left.
+var stopWords = map[string]bool{
+	"a": true, "about": true, "an": true, "and": true, "are": true, "as": true, "at": true, "be": true,
+	"by": true, "did": true, "do": true, "does": true, "for": true, "from": true, "how": true, "i": true,
+	"in": true, "into": true, "is": true, "it": true, "me": true, "my": true, "of": true, "on": true,
+	"or": true, "tell": true, "that": true, "the": true, "this": true, "to": true, "what": true, "when": true,
+	"where": true, "which": true, "who": true, "why": true, "with": true,
+	"а": true, "в": true, "во": true, "где": true, "для": true, "до": true, "если": true, "же": true,
+	"за": true, "и": true, "из": true, "или": true, "как": true, "какая": true, "какие": true, "каким": true,
+	"каких": true, "каком": true, "какой": true, "когда": true, "кто": true, "ли": true, "мне": true, "на": true,
+	"не": true, "но": true, "о": true, "об": true, "от": true, "по": true, "про": true, "с": true,
+	"со": true, "так": true, "то": true, "у": true, "чем": true, "что": true, "это": true,
 }
 
 func normalizeLimit(limit int) int {
@@ -92,8 +86,27 @@ func chunkPoolLimit(pageLimit int) int {
 
 func ftsTokens(query string) []string {
 	tokens := ftsToken.FindAllString(query, -1)
+	content := tokens[:0:0]
+	for _, token := range tokens {
+		if !stopWords[yoFold.Replace(strings.ToLower(token))] {
+			content = append(content, token)
+		}
+	}
+	if len(content) > 0 {
+		tokens = content
+	}
 	if len(tokens) > 8 {
 		tokens = tokens[:8]
+	}
+	return tokens
+}
+
+// QueryTerms returns the normalized terms a query searches for, as stored in
+// the FTS terms column.
+func QueryTerms(query string) []string {
+	tokens := ftsTokens(query)
+	for i, token := range tokens {
+		tokens[i] = searchTerm(token)
 	}
 	return tokens
 }
@@ -114,7 +127,7 @@ func titleAliasLookupTerms(query string) []string {
 	add(full)
 	for _, token := range tokens {
 		term := normalizeLookup(token)
-		if ignoredLookupTokens[term] {
+		if stopWords[term] {
 			continue
 		}
 		if utf8.RuneCountInString(term) < 2 && len(tokens) > 1 {
@@ -179,13 +192,9 @@ func ftsQueryJoin(tokens []string, separator string) string {
 	}
 	parts := make([]string, 0, len(tokens))
 	for _, token := range tokens {
-		term := searchTerm(token)
+		term := strings.ReplaceAll(searchTerm(token), `"`, `""`)
 		token = strings.ReplaceAll(token, `"`, `""`)
-		if term == strings.ToLower(token) {
-			parts = append(parts, fmt.Sprintf(`"%s"`, token))
-			continue
-		}
-		parts = append(parts, fmt.Sprintf(`("%s" OR terms:"%s")`, token, strings.ReplaceAll(term, `"`, `""`)))
+		parts = append(parts, fmt.Sprintf(`({title body}:"%s" OR terms:"%s")`, token, term))
 	}
 	return strings.Join(parts, separator)
 }

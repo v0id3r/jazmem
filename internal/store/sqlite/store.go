@@ -85,7 +85,8 @@ type SearchResult struct {
 	ChunkIndex int     `json:"chunk_index"`
 	Snippet    string  `json:"snippet"`
 	Score      float64 `json:"score"`
-	// Via names the retrieval arm that produced the row: relationship, title, text, link.
+	// Via names the retrieval arm that contributed most: relationship, semantic,
+	// link, or empty for title and text matches.
 	Via string `json:"via,omitempty"`
 }
 

@@ -84,14 +84,9 @@ func mergeChunkResults(rows []sqlitestore.SearchResult, limit int) []Result {
 			})
 		}
 		result := &results[idx]
-		if len(result.Matches) == 0 || row.Score < result.Score {
-			result.Score = row.Score
-			result.Via = row.Via
-		}
 		result.Matches = append(result.Matches, Match{
 			Chunk:   row.ChunkIndex,
 			Snippet: row.Snippet,
-			Score:   row.Score,
 		})
 	}
 	return results
