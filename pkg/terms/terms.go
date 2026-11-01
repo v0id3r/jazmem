@@ -3,20 +3,20 @@
 package terms
 
 import (
-	"regexp"
 	"strings"
 	"unicode"
 
-	"github.com/kljensen/snowball/russian"
+	"github.com/blevesearch/snowballstem"
+	"github.com/blevesearch/snowballstem/russian"
 )
-
-var word = regexp.MustCompile(`[\p{L}\p{M}\p{N}_]+`)
 
 var yoFold = strings.NewReplacer("ё", "е")
 
-// Words splits text into words.
+// Words splits text into words: runs of letters, marks, digits and underscores.
 func Words(text string) []string {
-	return word.FindAllString(text, -1)
+	return strings.FieldsFunc(text, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsMark(r) && !unicode.IsNumber(r) && r != '_'
+	})
 }
 
 // Fold lowercases a word and folds ё to е.
@@ -25,14 +25,15 @@ func Fold(w string) string {
 }
 
 // Term returns the search form of a word: folded, and reduced to its Snowball
-// stem when Cyrillic. The stemmer must see the folded word: it stems ё and е
-// spellings differently.
+// stem when Cyrillic.
 func Term(w string) string {
 	w = Fold(w)
 	if !strings.ContainsFunc(w, isCyrillic) {
 		return w
 	}
-	return russian.Stem(w, false)
+	env := snowballstem.NewEnv(w)
+	russian.Stem(env)
+	return env.Current()
 }
 
 // Text returns the search forms of the words in text, space-separated.
