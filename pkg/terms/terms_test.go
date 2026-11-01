@@ -7,6 +7,7 @@ func TestTermMatchesSpellingsAndWordForms(t *testing.T) {
 		{"тёплый", "теплый", "Тёплого", "теплом"},
 		{"кабель", "кабеля", "КАБЕЛЕМ"},
 		{"шпаклёвка", "шпаклевку"},
+		{"cache", "caches", "Caching"},
 	} {
 		want := Term(group[0])
 		for _, w := range group[1:] {
@@ -15,7 +16,7 @@ func TestTermMatchesSpellingsAndWordForms(t *testing.T) {
 			}
 		}
 	}
-	if got := Text("Jaz MCP_server v2"); got != "jaz mcp_server v2" {
-		t.Errorf("Text(latin) = %q, want lowercase words unchanged", got)
+	if got := Text("Jaz v2 2026"); got != "jaz v2 2026" {
+		t.Errorf("Text = %q, want names and numbers unchanged", got)
 	}
 }

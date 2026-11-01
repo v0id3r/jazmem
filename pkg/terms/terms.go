@@ -1,5 +1,5 @@
 // Package terms gives words the form full-text indexes store and match, so ё/е
-// spellings and Russian word forms find each other.
+// spellings and Russian and English word forms find each other.
 package terms
 
 import (
@@ -7,6 +7,7 @@ import (
 	"unicode"
 
 	"github.com/blevesearch/snowballstem"
+	"github.com/blevesearch/snowballstem/english"
 	"github.com/blevesearch/snowballstem/russian"
 )
 
@@ -24,15 +25,16 @@ func Fold(w string) string {
 	return yoFold.Replace(strings.ToLower(w))
 }
 
-// Term returns the search form of a word: folded, and reduced to its Snowball
-// stem when Cyrillic.
+// Term returns the search form of a word: folded and reduced to its Snowball
+// stem, Russian for Cyrillic words and English for the rest.
 func Term(w string) string {
 	w = Fold(w)
-	if !strings.ContainsFunc(w, isCyrillic) {
-		return w
-	}
 	env := snowballstem.NewEnv(w)
-	russian.Stem(env)
+	if strings.ContainsFunc(w, isCyrillic) {
+		russian.Stem(env)
+	} else {
+		english.Stem(env)
+	}
 	return env.Current()
 }
 
