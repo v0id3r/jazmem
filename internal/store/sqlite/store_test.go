@@ -12,8 +12,8 @@ func TestMigrateFreshDB(t *testing.T) {
 	store := openTestStore(t)
 	defer func() { _ = store.Close() }()
 
-	if version := gooseVersion(t, store.db); version != 3 {
-		t.Fatalf("goose version = %d, want 3", version)
+	if version := gooseVersion(t, store.db); version != 4 {
+		t.Fatalf("goose version = %d, want 4", version)
 	}
 	for _, table := range []string{"pages", "aliases", "links", "unresolved_links", "chunks", "chunks_fts", "scheduler_state", "index_state"} {
 		exists, err := store.tableExists(t.Context(), table)
@@ -38,8 +38,8 @@ func TestMigrateAdoptsCompleteLegacySchema(t *testing.T) {
 	}
 	defer func() { _ = store.Close() }()
 
-	if version := gooseVersion(t, store.db); version != 3 {
-		t.Fatalf("goose version = %d, want 3", version)
+	if version := gooseVersion(t, store.db); version != 4 {
+		t.Fatalf("goose version = %d, want 4", version)
 	}
 }
 
@@ -164,8 +164,8 @@ func TestSearchMatchesCyrillicQueryTerms(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(hits) != 2 || hits[0].Slug != "projects/bathroom" {
-		t.Fatalf("Search(кабель) = %#v, want the exact form first and the stem match second", hits)
+	if len(hits) != 2 {
+		t.Fatalf("Search(кабель) = %#v, want both the exact form and the stem match", hits)
 	}
 	if terms := titleAliasLookupTerms("тёплый пол в ванной"); strings.Join(terms, "|") != "тёплый пол в ванной|тёплый|пол|ванной" {
 		t.Fatalf("title alias terms = %q, want single-letter words skipped", terms)

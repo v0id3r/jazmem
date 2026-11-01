@@ -1,7 +1,6 @@
 package sqlite
 
 import (
-	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
@@ -70,8 +69,7 @@ func ftsTokens(query string) []string {
 	return tokens
 }
 
-// QueryTerms returns the normalized terms a query searches for, as stored in
-// the FTS terms column.
+// QueryTerms returns the stems of the words a query searches for.
 func QueryTerms(query string) []string {
 	tokens := ftsTokens(query)
 	for i, token := range tokens {
@@ -161,9 +159,7 @@ func ftsQueryJoin(tokens []string, separator string) string {
 	}
 	parts := make([]string, 0, len(tokens))
 	for _, token := range tokens {
-		term := strings.ReplaceAll(terms.Term(token), `"`, `""`)
-		token = strings.ReplaceAll(token, `"`, `""`)
-		parts = append(parts, fmt.Sprintf(`({title body}:"%s" OR terms:"%s")`, token, term))
+		parts = append(parts, `"`+strings.ReplaceAll(token, `"`, `""`)+`"`)
 	}
 	return strings.Join(parts, separator)
 }

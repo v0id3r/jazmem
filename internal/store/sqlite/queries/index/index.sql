@@ -65,8 +65,8 @@ INSERT INTO chunks(slug, chunk_index, body, body_hash, embedding, modified_at_ms
 VALUES (?, ?, ?, ?, ?, ?);
 
 -- name: InsertChunkFTS :exec
-INSERT INTO chunks_fts(slug, chunk_index, title, body, terms)
-VALUES (?, ?, ?, ?, ?);
+INSERT INTO chunks_fts(slug, chunk_index, title, body)
+VALUES (?, ?, ?, ?);
 
 -- name: RecordIndexState :exec
 INSERT OR REPLACE INTO index_state(key, value, updated_at_ms)
