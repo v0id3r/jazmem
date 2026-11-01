@@ -71,3 +71,21 @@ VALUES (?, ?, ?, ?, ?);
 -- name: RecordIndexState :exec
 INSERT OR REPLACE INTO index_state(key, value, updated_at_ms)
 VALUES (?, ?, ?);
+
+-- name: PendingChunkEmbeddings :many
+SELECT body_hash, CAST(MIN(body) AS TEXT) AS body
+FROM chunks c
+WHERE NOT EXISTS (
+	SELECT 1 FROM chunk_embeddings e WHERE e.body_hash = c.body_hash AND e.model = ?
+)
+GROUP BY body_hash
+ORDER BY body_hash
+LIMIT ?;
+
+-- name: InsertChunkEmbedding :exec
+INSERT OR REPLACE INTO chunk_embeddings(body_hash, model, embedding)
+VALUES (?, ?, ?);
+
+-- name: DeleteStaleChunkEmbeddings :exec
+DELETE FROM chunk_embeddings
+WHERE model != ? OR body_hash NOT IN (SELECT body_hash FROM chunks);

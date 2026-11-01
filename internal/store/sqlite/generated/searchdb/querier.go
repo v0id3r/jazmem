@@ -11,6 +11,7 @@ import (
 type Querier interface {
 	SearchLike(ctx context.Context, arg SearchLikeParams) ([]SearchLikeRow, error)
 	SearchTitleAliasTerm(ctx context.Context, arg SearchTitleAliasTermParams) ([]SearchTitleAliasTermRow, error)
+	SearchVector(ctx context.Context, arg SearchVectorParams) ([]SearchVectorRow, error)
 }
 
 var _ Querier = (*Queries)(nil)

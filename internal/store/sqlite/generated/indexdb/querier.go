@@ -16,15 +16,18 @@ type Querier interface {
 	DeletePageLinks(ctx context.Context, jsonEach interface{}) error
 	DeletePageUnresolved(ctx context.Context, jsonEach interface{}) error
 	DeleteRelationshipLinks(ctx context.Context) error
+	DeleteStaleChunkEmbeddings(ctx context.Context, model string) error
 	IndexCatalog(ctx context.Context) (string, error)
 	IndexCounts(ctx context.Context) (IndexCountsRow, error)
 	InsertAlias(ctx context.Context, arg InsertAliasParams) error
 	InsertChunk(ctx context.Context, arg InsertChunkParams) error
+	InsertChunkEmbedding(ctx context.Context, arg InsertChunkEmbeddingParams) error
 	InsertChunkFTS(ctx context.Context, arg InsertChunkFTSParams) error
 	InsertLink(ctx context.Context, arg InsertLinkParams) error
 	InsertPage(ctx context.Context, arg InsertPageParams) error
 	InsertUnresolvedLink(ctx context.Context, arg InsertUnresolvedLinkParams) error
 	ListIndexedPages(ctx context.Context) ([]ListIndexedPagesRow, error)
+	PendingChunkEmbeddings(ctx context.Context, arg PendingChunkEmbeddingsParams) ([]PendingChunkEmbeddingsRow, error)
 	RecordIndexState(ctx context.Context, arg RecordIndexStateParams) error
 }
 

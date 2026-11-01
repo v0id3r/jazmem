@@ -72,6 +72,16 @@ func (q *Queries) DeleteRelationshipLinks(ctx context.Context) error {
 	return err
 }
 
+const deleteStaleChunkEmbeddings = `-- name: DeleteStaleChunkEmbeddings :exec
+DELETE FROM chunk_embeddings
+WHERE model != ? OR body_hash NOT IN (SELECT body_hash FROM chunks)
+`
+
+func (q *Queries) DeleteStaleChunkEmbeddings(ctx context.Context, model string) error {
+	_, err := q.db.ExecContext(ctx, deleteStaleChunkEmbeddings, model)
+	return err
+}
+
 const indexCatalog = `-- name: IndexCatalog :one
 SELECT value FROM index_state WHERE key = 'catalog'
 `
@@ -155,6 +165,22 @@ func (q *Queries) InsertChunk(ctx context.Context, arg InsertChunkParams) error 
 		arg.Embedding,
 		arg.ModifiedAtMs,
 	)
+	return err
+}
+
+const insertChunkEmbedding = `-- name: InsertChunkEmbedding :exec
+INSERT OR REPLACE INTO chunk_embeddings(body_hash, model, embedding)
+VALUES (?, ?, ?)
+`
+
+type InsertChunkEmbeddingParams struct {
+	BodyHash  string `json:"body_hash"`
+	Model     string `json:"model"`
+	Embedding []byte `json:"embedding"`
+}
+
+func (q *Queries) InsertChunkEmbedding(ctx context.Context, arg InsertChunkEmbeddingParams) error {
+	_, err := q.db.ExecContext(ctx, insertChunkEmbedding, arg.BodyHash, arg.Model, arg.Embedding)
 	return err
 }
 
@@ -306,6 +332,50 @@ func (q *Queries) ListIndexedPages(ctx context.Context) ([]ListIndexedPagesRow, 
 			&i.ModifiedAtMs,
 			&i.ExtractorHash,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const pendingChunkEmbeddings = `-- name: PendingChunkEmbeddings :many
+SELECT body_hash, CAST(MIN(body) AS TEXT) AS body
+FROM chunks c
+WHERE NOT EXISTS (
+	SELECT 1 FROM chunk_embeddings e WHERE e.body_hash = c.body_hash AND e.model = ?
+)
+GROUP BY body_hash
+ORDER BY body_hash
+LIMIT ?
+`
+
+type PendingChunkEmbeddingsParams struct {
+	Model string `json:"model"`
+	Limit int64  `json:"limit"`
+}
+
+type PendingChunkEmbeddingsRow struct {
+	BodyHash string `json:"body_hash"`
+	Body     string `json:"body"`
+}
+
+func (q *Queries) PendingChunkEmbeddings(ctx context.Context, arg PendingChunkEmbeddingsParams) ([]PendingChunkEmbeddingsRow, error) {
+	rows, err := q.db.QueryContext(ctx, pendingChunkEmbeddings, arg.Model, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PendingChunkEmbeddingsRow{}
+	for rows.Next() {
+		var i PendingChunkEmbeddingsRow
+		if err := rows.Scan(&i.BodyHash, &i.Body); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -15,6 +15,9 @@ type Config struct {
 	Now                   func() time.Time
 	DreamRunner           DreamRunner
 	DisableProviderDreams bool
+	// EmbeddingEndpoint is an Ollama server; empty disables vector search.
+	EmbeddingEndpoint string
+	EmbeddingModel    string
 }
 
 type PageRef struct {

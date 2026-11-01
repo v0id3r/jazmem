@@ -61,6 +61,7 @@ func (m *Memory) retrieve(ctx context.Context, query string, rawLimit int, deep 
 			Chunks:    chunks,
 			GraphHits: candidates.GraphHits,
 		},
+		Warnings: candidates.Warnings,
 	}, nil
 }
 

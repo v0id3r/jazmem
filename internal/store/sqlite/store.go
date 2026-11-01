@@ -14,6 +14,7 @@ import (
 	"github.com/gluonfield/jazmem/internal/store/sqlite/generated/statedb"
 
 	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite/vec"
 )
 
 type Store struct {

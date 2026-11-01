@@ -167,3 +167,60 @@ func (q *Queries) SearchTitleAliasTerm(ctx context.Context, arg SearchTitleAlias
 	}
 	return items, nil
 }
+
+const searchVector = `-- name: SearchVector :many
+SELECT c.slug,
+	c.chunk_index,
+	p.title,
+	substr(c.body, 1, 600) AS snippet,
+	CAST(vec_distance_cosine(e.embedding, ?1) AS REAL) AS distance
+FROM chunks c
+JOIN chunk_embeddings e ON e.body_hash = c.body_hash AND e.model = ?2
+JOIN pages p ON p.slug = c.slug
+WHERE c.slug NOT LIKE 'dreams/%'
+ORDER BY distance
+LIMIT ?3
+`
+
+type SearchVectorParams struct {
+	QueryVector interface{} `json:"query_vector"`
+	Model       string      `json:"model"`
+	Limit       int64       `json:"limit"`
+}
+
+type SearchVectorRow struct {
+	Slug       string  `json:"slug"`
+	ChunkIndex int64   `json:"chunk_index"`
+	Title      string  `json:"title"`
+	Snippet    string  `json:"snippet"`
+	Distance   float64 `json:"distance"`
+}
+
+func (q *Queries) SearchVector(ctx context.Context, arg SearchVectorParams) ([]SearchVectorRow, error) {
+	rows, err := q.db.QueryContext(ctx, searchVector, arg.QueryVector, arg.Model, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SearchVectorRow{}
+	for rows.Next() {
+		var i SearchVectorRow
+		if err := rows.Scan(
+			&i.Slug,
+			&i.ChunkIndex,
+			&i.Title,
+			&i.Snippet,
+			&i.Distance,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

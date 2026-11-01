@@ -15,6 +15,7 @@ const (
 	TaskLinkHygiene       = "link_hygiene"
 	TaskDream             = "dream"
 	TaskOptimizeIndex     = "optimize_index"
+	TaskEmbedChunks       = "embed_chunks"
 )
 
 type taskSpec struct {
@@ -74,7 +75,7 @@ func weeklySpec(name string, hour int, run func(context.Context) error) taskSpec
 }
 
 func (m *Memory) taskSpecs() []taskSpec {
-	return []taskSpec{
+	specs := []taskSpec{
 		intervalSpec(TaskIndexChangedPages, time.Minute, func(ctx context.Context) error {
 			return m.runMaintenance(ctx, func(ctx context.Context) error {
 				_, err := m.Reindex(ctx, ReindexOptions{})
@@ -100,6 +101,10 @@ func (m *Memory) taskSpecs() []taskSpec {
 			return m.runMaintenance(ctx, m.store.Optimize)
 		}),
 	}
+	if m.embedder != nil {
+		specs = append(specs, intervalSpec(TaskEmbedChunks, time.Minute, m.embedChunks))
+	}
+	return specs
 }
 
 func (m *Memory) RunIndexTask(ctx context.Context) (Report, error) {

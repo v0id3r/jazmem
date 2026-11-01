@@ -2,10 +2,12 @@ package jazmem
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/gluonfield/jazmem/internal/dream"
+	"github.com/gluonfield/jazmem/internal/embed"
 	"github.com/gluonfield/jazmem/internal/hygiene"
 	"github.com/gluonfield/jazmem/internal/indexer"
 	"github.com/gluonfield/jazmem/internal/llm"
@@ -23,6 +25,7 @@ type Memory struct {
 	store            *sqlitestore.Store
 	indexer          *indexer.Indexer
 	search           *search.Service
+	embedder         *embed.Ollama
 	dream            *dream.Service
 	dreamRun         DreamRunner
 	noProviderDreams bool
@@ -58,7 +61,10 @@ func open(cfg Config) (*Memory, error) {
 	}
 	m.dreamRun = cfg.DreamRunner
 	m.indexer = &indexer.Indexer{FS: fs, Store: store}
-	m.search = &search.Service{Store: store}
+	if endpoint := strings.TrimSpace(cfg.EmbeddingEndpoint); endpoint != "" {
+		m.embedder = &embed.Ollama{Endpoint: endpoint, Model: strings.TrimSpace(cfg.EmbeddingModel)}
+	}
+	m.search = &search.Service{Store: store, Embedder: m.embedder}
 	m.llm = llm.New(llm.Config{
 		APIKey:          cfg.APIKey,
 		Model:           cfg.Model,

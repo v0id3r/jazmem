@@ -11,6 +11,7 @@ import (
 const (
 	defaultProviderEndpoint = "https://openrouter.ai/api/v1"
 	defaultModel            = "openai/gpt-5.4-mini"
+	defaultEmbeddingModel   = "bge-m3"
 )
 
 var loadEnvOnce sync.Once
@@ -78,6 +79,15 @@ func ResolveConfig(cfg Config) Config {
 	}
 	if strings.TrimSpace(cfg.ReasoningEffort) == "" {
 		cfg.ReasoningEffort = firstEnv("REASONING_EFFORT", "JAZMEM_REASONING_EFFORT")
+	}
+	if strings.TrimSpace(cfg.EmbeddingEndpoint) == "" {
+		cfg.EmbeddingEndpoint = firstEnv("JAZMEM_EMBEDDING_ENDPOINT")
+	}
+	if strings.TrimSpace(cfg.EmbeddingModel) == "" {
+		cfg.EmbeddingModel = firstEnv("JAZMEM_EMBEDDING_MODEL")
+	}
+	if strings.TrimSpace(cfg.EmbeddingModel) == "" {
+		cfg.EmbeddingModel = defaultEmbeddingModel
 	}
 	return cfg
 }

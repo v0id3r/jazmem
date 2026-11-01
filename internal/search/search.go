@@ -6,13 +6,23 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/gluonfield/jazmem/internal/embed"
 	sqlitestore "github.com/gluonfield/jazmem/internal/store/sqlite"
 )
 
 type Service struct {
 	Store *sqlitestore.Store
+	// Embedder is nil when vector search is disabled.
+	Embedder *embed.Ollama
 }
+
+const (
+	queryEmbedTimeout = 5 * time.Second
+	maxVectorDistance = 0.52
+	vectorScoreOffset = -1.0
+)
 
 type Options struct {
 	Limit int
@@ -22,6 +32,7 @@ type Options struct {
 type Response struct {
 	Rows      []sqlitestore.SearchResult
 	GraphHits int
+	Warnings  []string
 }
 
 func (s *Service) Search(ctx context.Context, query string, opts Options) (Response, error) {
@@ -39,7 +50,13 @@ func (s *Service) Search(ctx context.Context, query string, opts Options) (Respo
 	if err != nil {
 		return Response{}, err
 	}
-	merged := mergeRows(relationalRows, titleRows, bm25Rows)
+	var warnings []string
+	vectorRows, err := s.vectorSearch(ctx, query, limit)
+	if err != nil {
+		warnings = append(warnings, "vector search skipped: "+err.Error())
+	}
+	tagVia(vectorRows, "semantic")
+	merged := mergeRows(relationalRows, titleRows, bm25Rows, vectorRows)
 	seeds := topSlugs(merged, limit)
 	graphRows, err := s.Store.LinkedPages(ctx, seeds, limit)
 	if err != nil {
@@ -63,7 +80,35 @@ func (s *Service) Search(ctx context.Context, query string, opts Options) (Respo
 	if len(merged) > candidateCap {
 		merged = merged[:candidateCap]
 	}
-	return Response{Rows: merged, GraphHits: graphHits}, nil
+	return Response{Rows: merged, GraphHits: graphHits, Warnings: warnings}, nil
+}
+
+// vectorSearch returns chunks semantically close to query. Their scores sit
+// between direct text hits and link expansion, so vectors fill gaps that
+// exact terms miss without reordering what bm25 already found.
+func (s *Service) vectorSearch(ctx context.Context, query string, limit int) ([]sqlitestore.SearchResult, error) {
+	if s.Embedder == nil {
+		return nil, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, queryEmbedTimeout)
+	defer cancel()
+	vectors, err := s.Embedder.Embed(ctx, []string{query})
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.Store.SearchVector(ctx, s.Embedder.Model, vectors[0], limit)
+	if err != nil {
+		return nil, err
+	}
+	out := rows[:0]
+	for _, row := range rows {
+		if row.Score > maxVectorDistance {
+			break
+		}
+		row.Score += vectorScoreOffset
+		out = append(out, row)
+	}
+	return out, nil
 }
 
 // secondHop expands links once more from pages the first hop discovered,

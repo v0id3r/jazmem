@@ -46,3 +46,16 @@ JOIN pages p ON p.slug = c.slug
 WHERE (p.title LIKE ? OR c.body LIKE ?) AND c.slug NOT LIKE 'dreams/%'
 ORDER BY score, p.title, c.chunk_index
 LIMIT ?;
+
+-- name: SearchVector :many
+SELECT c.slug,
+	c.chunk_index,
+	p.title,
+	substr(c.body, 1, 600) AS snippet,
+	CAST(vec_distance_cosine(e.embedding, sqlc.arg(query_vector)) AS REAL) AS distance
+FROM chunks c
+JOIN chunk_embeddings e ON e.body_hash = c.body_hash AND e.model = sqlc.arg(model)
+JOIN pages p ON p.slug = c.slug
+WHERE c.slug NOT LIKE 'dreams/%'
+ORDER BY distance
+LIMIT sqlc.arg(limit);

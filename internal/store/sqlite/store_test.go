@@ -12,8 +12,8 @@ func TestMigrateFreshDB(t *testing.T) {
 	store := openTestStore(t)
 	defer func() { _ = store.Close() }()
 
-	if version := gooseVersion(t, store.db); version != 2 {
-		t.Fatalf("goose version = %d, want 2", version)
+	if version := gooseVersion(t, store.db); version != 3 {
+		t.Fatalf("goose version = %d, want 3", version)
 	}
 	for _, table := range []string{"pages", "aliases", "links", "unresolved_links", "chunks", "chunks_fts", "scheduler_state", "index_state"} {
 		exists, err := store.tableExists(t.Context(), table)
@@ -38,8 +38,8 @@ func TestMigrateAdoptsCompleteLegacySchema(t *testing.T) {
 	}
 	defer func() { _ = store.Close() }()
 
-	if version := gooseVersion(t, store.db); version != 2 {
-		t.Fatalf("goose version = %d, want 2", version)
+	if version := gooseVersion(t, store.db); version != 3 {
+		t.Fatalf("goose version = %d, want 3", version)
 	}
 }
 
