@@ -16,17 +16,16 @@ type Service struct {
 	Embedder *embed.Ollama
 }
 
-const (
-	queryEmbedTimeout = 5 * time.Second
-	maxVectorDistance = 0.52
-)
+const queryEmbedTimeout = 5 * time.Second
 
-// Arm weights: what first place in each retrieval method is worth.
+// Arm weights: what first place in each retrieval method is worth. Vectors
+// outweigh text because bge-m3 ranks cross-language and paraphrased queries
+// well; no distance cutoff, since relevant and unrelated pages overlap there.
 const (
 	relationshipWeight = 3.0
 	titleWeight        = 1.5
 	textWeight         = 1.0
-	semanticWeight     = 1.0
+	semanticWeight     = 3.0
 	linkWeight         = 0.3
 )
 
@@ -93,8 +92,7 @@ func (s *Service) Search(ctx context.Context, query string, opts Options) (Respo
 	return Response{Rows: rows, GraphHits: countNewSlugs(direct, linkRows), Warnings: warnings}, nil
 }
 
-// vectorSearch returns chunks within maxVectorDistance of query, closest
-// first; beyond it bge-m3 neighbours are unrelated.
+// vectorSearch returns the pages closest in meaning to query, one chunk each.
 func (s *Service) vectorSearch(ctx context.Context, query string, limit int) ([]sqlitestore.SearchResult, error) {
 	if s.Embedder == nil {
 		return nil, nil
@@ -105,16 +103,7 @@ func (s *Service) vectorSearch(ctx context.Context, query string, limit int) ([]
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.Store.SearchVector(ctx, s.Embedder.Model, vectors[0], limit)
-	if err != nil {
-		return nil, err
-	}
-	for i, row := range rows {
-		if row.Score > maxVectorDistance {
-			return rows[:i], nil
-		}
-	}
-	return rows, nil
+	return s.Store.SearchVector(ctx, s.Embedder.Model, vectors[0], limit)
 }
 
 // secondHop expands links once more from pages the first hop discovered;

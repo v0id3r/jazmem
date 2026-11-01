@@ -48,8 +48,8 @@ func TestVectorSearchFindsPagesWithoutSharedTermsAndDegradesWhenEmbedderIsDown(t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(response.Results) != 1 || response.Results[0].Slug != "projects/walls" || response.Results[0].Via != "semantic" || len(response.Warnings) != 0 {
-		t.Fatalf("vector retrieve = %#v, want only projects/walls via semantic", response)
+	if len(response.Results) == 0 || response.Results[0].Slug != "projects/walls" || response.Results[0].Via != "semantic" || len(response.Warnings) != 0 {
+		t.Fatalf("vector retrieve = %#v, want projects/walls first via semantic", response)
 	}
 
 	ollama.Close()
