@@ -1,8 +1,10 @@
 package indexer
 
 import (
+	"context"
 	"testing"
 
+	"github.com/gluonfield/jazmem/internal/memfs"
 	sqlitestore "github.com/gluonfield/jazmem/internal/store/sqlite"
 )
 
@@ -44,6 +46,43 @@ func TestExtractExplicitLinksMarksRelationshipSectionOnly(t *testing.T) {
 func TestNormalizeAlias(t *testing.T) {
 	if got := NormalizeAlias("  Alice   Smith "); got != "alice smith" {
 		t.Fatalf("NormalizeAlias = %q", got)
+	}
+}
+
+func TestResolverMatchesShortNamesRegardlessOfHyphens(t *testing.T) {
+	r := newResolver([]memfs.Page{
+		{Slug: "projects/home-network", Title: "Home / office network"},
+		{Slug: "projects/phrase-registry", Title: "phrase-registry (Go service at MTS)"},
+		{Slug: "sources/agent/a/foo-bar", Title: "Foo A"},
+		{Slug: "sources/agent/b/foo-bar", Title: "Foo B"},
+	})
+	for _, tc := range []struct{ target, slug, reason string }{
+		{"home-network", "projects/home-network", ""},
+		{"Home Network", "projects/home-network", ""},
+		{"projects/home-network", "projects/home-network", ""},
+		{"phrase registry (go service at mts)", "projects/phrase-registry", ""},
+		{"foo-bar", "", "ambiguous"},
+		{"no-such-page", "", "dangling"},
+	} {
+		slug, reason := r.Resolve(tc.target)
+		if slug != tc.slug || reason != tc.reason {
+			t.Errorf("Resolve(%q) = %q, %q; want %q, %q", tc.target, slug, reason, tc.slug, tc.reason)
+		}
+	}
+}
+
+func TestBuildIndexResolvesHyphenatedShortLinks(t *testing.T) {
+	target := memfs.Page{Slug: "projects/home-network", Title: "Home network"}
+	daily := memfs.Page{Slug: "daily/2026-11-10", Title: "Daily", Body: "Router back: [[home-network]]."}
+	data, err := buildIndex(context.Background(), []memfs.Page{daily}, []memfs.Page{target, daily})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data.Unresolved) != 0 {
+		t.Fatalf("unexpected unresolved links %#v", data.Unresolved)
+	}
+	if len(data.Links) != 1 || data.Links[0].ToSlug != "projects/home-network" {
+		t.Fatalf("expected one link to projects/home-network, got %#v", data.Links)
 	}
 }
 

@@ -23,7 +23,7 @@ import (
 // graph as body wikilinks without being duplicated into prose.
 var frontmatterLinkFields = []string{"project"}
 
-const extractorHash = "jazmem-indexer-v7"
+const extractorHash = "jazmem-indexer-v8"
 
 type Indexer struct {
 	mu    sync.Mutex
@@ -320,14 +320,21 @@ func newResolver(pages []memfs.Page) resolver {
 	for _, page := range pages {
 		r.slugs[page.Slug] = true
 		for _, alias := range aliasesForPage(page) {
-			normalized := NormalizeAlias(alias)
-			if normalized == "" {
+			key := linkNameKey(alias)
+			if key == "" {
 				continue
 			}
-			r.names[normalized] = appendUnique(r.names[normalized], page.Slug)
+			r.names[key] = appendUnique(r.names[key], page.Slug)
 		}
 	}
 	return r
+}
+
+// linkNameKey matches link targets to page names regardless of hyphens, so
+// [[home-network]] finds projects/home-network, whose slugTail alias is
+// "home network".
+func linkNameKey(name string) string {
+	return NormalizeAlias(strings.ReplaceAll(name, "-", " "))
 }
 
 func (r resolver) Resolve(target string) (string, string) {
@@ -339,8 +346,7 @@ func (r resolver) Resolve(target string) (string, string) {
 	if r.slugs[clean] {
 		return clean, ""
 	}
-	normalized := NormalizeAlias(target)
-	matches := r.names[normalized]
+	matches := r.names[linkNameKey(target)]
 	switch len(matches) {
 	case 0:
 		return "", "dangling"
