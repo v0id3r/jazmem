@@ -56,17 +56,18 @@ func TestResolverMatchesShortNamesRegardlessOfHyphens(t *testing.T) {
 		{Slug: "sources/agent/a/foo-bar", Title: "Foo A"},
 		{Slug: "sources/agent/b/foo-bar", Title: "Foo B"},
 	})
-	for _, tc := range []struct{ target, slug, reason string }{
-		{"home-network", "projects/home-network", ""},
-		{"Home Network", "projects/home-network", ""},
-		{"projects/home-network", "projects/home-network", ""},
-		{"phrase registry (go service at mts)", "projects/phrase-registry", ""},
-		{"foo-bar", "", "ambiguous"},
-		{"no-such-page", "", "dangling"},
+	for _, tc := range []struct{ from, target, slug, reason string }{
+		{"daily/2026-11-10", "home-network", "projects/home-network", ""},
+		{"daily/2026-11-10", "Home Network", "projects/home-network", ""},
+		{"daily/2026-11-10", "projects/home-network", "projects/home-network", ""},
+		{"daily/2026-11-10", "phrase registry (go service at mts)", "projects/phrase-registry", ""},
+		{"daily/2026-11-10", "foo-bar", "", "ambiguous"},
+		{"sources/agent/b/notes", "foo-bar", "sources/agent/b/foo-bar", ""},
+		{"daily/2026-11-10", "no-such-page", "", "dangling"},
 	} {
-		slug, reason := r.Resolve(tc.target)
+		slug, reason := r.Resolve(tc.from, tc.target)
 		if slug != tc.slug || reason != tc.reason {
-			t.Errorf("Resolve(%q) = %q, %q; want %q, %q", tc.target, slug, reason, tc.slug, tc.reason)
+			t.Errorf("Resolve(%q, %q) = %q, %q; want %q, %q", tc.from, tc.target, slug, reason, tc.slug, tc.reason)
 		}
 	}
 }

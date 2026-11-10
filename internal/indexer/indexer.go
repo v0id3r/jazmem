@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"path"
 	"regexp"
 	"slices"
 	"sort"
@@ -76,7 +77,7 @@ func buildIndex(ctx context.Context, pages, catalog []memfs.Page) (sqlitestore.I
 
 		clean := StripCode(page.Body)
 		for _, link := range ExtractExplicitLinks(clean) {
-			target, reason := resolver.Resolve(link.Target)
+			target, reason := resolver.Resolve(page.Slug, link.Target)
 			if target == "" {
 				data.Unresolved = append(data.Unresolved, sqlitestore.UnresolvedLinkRecord{
 					FromSlug: page.Slug,
@@ -101,7 +102,7 @@ func buildIndex(ctx context.Context, pages, catalog []memfs.Page) (sqlitestore.I
 		}
 
 		for _, target := range frontmatterLinkTargets(page.Frontmatter) {
-			resolved, reason := resolver.Resolve(target)
+			resolved, reason := resolver.Resolve(page.Slug, target)
 			if resolved == "" {
 				data.Unresolved = append(data.Unresolved, sqlitestore.UnresolvedLinkRecord{
 					FromSlug: page.Slug,
@@ -144,7 +145,7 @@ func buildIndex(ctx context.Context, pages, catalog []memfs.Page) (sqlitestore.I
 			if !link.InRelationships {
 				continue
 			}
-			target, _ := resolver.Resolve(link.Target)
+			target, _ := resolver.Resolve(page.Slug, link.Target)
 			data.Links = append(data.Links, inferTypedLinks(page.Slug, target, link)...)
 		}
 	}
@@ -337,7 +338,8 @@ func linkNameKey(name string) string {
 	return NormalizeAlias(strings.ReplaceAll(name, "-", " "))
 }
 
-func (r resolver) Resolve(target string) (string, string) {
+// Resolve finds the page a link on page from points to.
+func (r resolver) Resolve(from, target string) (string, string) {
 	target = strings.TrimSpace(target)
 	clean := memfs.CleanSlug(target)
 	if clean == "" {
@@ -347,6 +349,9 @@ func (r resolver) Resolve(target string) (string, string) {
 		return clean, ""
 	}
 	matches := r.names[linkNameKey(target)]
+	if len(matches) > 1 {
+		matches = preferSiblings(from, matches)
+	}
 	switch len(matches) {
 	case 0:
 		return "", "dangling"
@@ -355,6 +360,23 @@ func (r resolver) Resolve(target string) (string, string) {
 	default:
 		return "", "ambiguous"
 	}
+}
+
+// preferSiblings narrows an ambiguous short name to the candidates in the
+// linking page's folder: flat note folders such as mirrored Claude auto-memory
+// link their neighbours by bare name.
+func preferSiblings(from string, candidates []string) []string {
+	dir := path.Dir(from)
+	var siblings []string
+	for _, slug := range candidates {
+		if path.Dir(slug) == dir {
+			siblings = append(siblings, slug)
+		}
+	}
+	if len(siblings) == 0 {
+		return candidates
+	}
+	return siblings
 }
 
 type gazetteerEntry struct {
